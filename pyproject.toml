@@ -1,0 +1,13 @@
+[project]
+name = "everydl"
+version = "0.1.0"
+description = "Windows TUI downloader for learning yt-dlp"
+requires-python = ">=3.10"
+dependencies = ["yt-dlp"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["downloader"]

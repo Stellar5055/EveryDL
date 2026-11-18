@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+everydl.egg-info/
+dist/
+build/
