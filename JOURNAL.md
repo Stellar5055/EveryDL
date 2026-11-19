@@ -20,3 +20,16 @@
 
 ![Console of 720p downloading](image-6.png)
 ![Properties of the downloaded video showing resolution](image-5.png)
+
+
+## Day 2
+
+- Started in the evening after school and first I started to think about the TUI. I havent made a TUI in Textual before, so i decided to ask my agent for help to learn. It gave me a plan, I accepted and gave me an example code with a part by part explanation. I spent some time learning the explanation then typed the code - changing a lot of things by hand and also changed the code structure for some parts to match what I am comfortable with, Then asked agent if it was ok.
+
+- The agent found 3 main problems - all small ones like typos or syntax errors - I told it to just fix it.
+
+- I ran it, some errors came, asked agent about it, it was just a threading bug - fixed it.
+
+- I am going to stop for today, so status is - the baisic TUI is complete its not beautifull or nything, and its not perfect, i will make a lot of changes. another problem is if i try to download a playlist, it only downlaods first one on that. need to fix that also tomorrow. Screenshot of current TUI:
+
+![TUI base version](image-7.png)

@@ -34,10 +34,10 @@ def resolve_spotify(url):
     return f"ytsearch1:{query}"
 
 
-def get_opts(mode):
+def get_opts(mode, hook=None):
     opts = {
         "outtmpl": OUTTMPL,
-        "progress_hooks": [progress_hook],
+        "progress_hooks": [hook or progress_hook],
         "noprogress": True,
         "noplaylist": True,
     }
@@ -62,7 +62,7 @@ def get_opts(mode):
         })
     return opts
 
-def download(url, mode):
+def download(url, mode, hook=None):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     if is_spotify(url):
         try:
@@ -71,7 +71,7 @@ def download(url, mode):
             print(f"\nCould not read Spotify link: {e}")
             return 1
     try:
-        with yt_dlp.YoutubeDL(get_opts(mode)) as ydl:
+        with yt_dlp.YoutubeDL(get_opts(mode, hook)) as ydl:
             return ydl.download([url])
     except yt_dlp.utils.DownloadError as e:
         print(f"\nDownload failed: {e}")
