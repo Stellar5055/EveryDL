@@ -39,6 +39,8 @@
 
 - In the morning, Iasked the agent for plans for a paste button, exit button and a hero on the top, after looking at it, I managed to almost do the exit and paste on my own, i have use pyperclip before and the exit button was not too bad, the only problem i faced was to liek gracefully stop any downloads if there, had to follow a tutorial for that. I asked agent is it ok, it found 3 errors mainly, small ones, told \it to fix them, tahst done
 
-- Now I tested it, the bottons work. then i made the hero, but coudnt figure out how to increase the size or anytjhing, agent told not possible. earlier i had looked into trying to put images but taht also wouldnt work - so keep it for now i guess. Screenshot of currrnt TUI:
+- Now I tested it, the bottons work. then i made the hero, but coudnt figure out how to increase the size or anything, agent told not possible. earlier i had looked into trying to put images but that also wouldnt work - so keep it for now i guess. Screenshot of currrnt TUI:
 
 ![UI with hero, exit and paste buttons](image-8.png)
+
+- Evening i resumed working on this. first I did some small distribution fixes which my agent recomended me to do - I made it so that in my computer, if i run ```uv tool install -e``` . then i can run ```everydl``` command everywhere to open the app, just kind of preperation for the exe final version. Then there was a series of errors regarding the progress bar, spend a long time triying stuff on my iown, then decided to ask agent. agent suggested to use a classic static progress bar instead of the textual one. did that it works. then i spent some time working on resizing the bar and like spacing etc.

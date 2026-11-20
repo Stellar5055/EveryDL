@@ -1,6 +1,6 @@
 import asyncio, pyperclip, threading
 from textual.app import ComposeResult, App
-from textual.widgets import Select, ProgressBar, Log, Button, Input, Header, Footer, Static
+from textual.widgets import Select, Log, Button, Input, Header, Footer, Static
 from textual.containers import Horizontal
 from downloader import download
 
@@ -36,11 +36,21 @@ class EveryDL(App):
       width: 80%;
       height: 10; 
     }
-    #bar {
+    #barrow {
       width: 80%;
-      height: 3;
+      height: 1;
       margin: 1 0;
-      border: solid gray;
+    }
+    #bar {
+      width: 1fr;
+      height: 1;
+      text-style: bold;
+    }
+    #pct {
+      width: 8;
+      height: 1;
+      text-align: right;
+      text-style: bold;
     }
     #mode {
       width: 80%;
@@ -49,6 +59,20 @@ class EveryDL(App):
 """
 
     _last_logged: float = -10.0
+    _progress_files: dict = {}
+
+    BAR_WIDTH = 120
+
+    @staticmethod
+    def _render_bar(percentage: float) -> str:
+        width = EveryDL.BAR_WIDTH
+        filled = int(round(percentage / 100 * width))
+        filled = max(0, min(width, filled))
+        return f"[cyan]{'█' * filled}[/][dim]{'░' * (width - filled)}[/]"
+
+    @staticmethod
+    def _render_pct(percentage: float) -> str:
+        return f"{percentage:5.1f}%"
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -77,7 +101,11 @@ class EveryDL(App):
             id="actions"
         )
 
-        yield ProgressBar(total=100, id="bar")
+        yield Horizontal(
+            Static(self._render_bar(0.0), id="bar"),
+            Static(self._render_pct(0.0), id="pct"),
+            id="barrow",
+        )
         yield Log(id="log")
         yield Footer()
 
@@ -112,7 +140,8 @@ class EveryDL(App):
 
         log = self.query_one("#log", Log)
         button = self.query_one("#go", Button)
-        bar = self.query_one("#bar", ProgressBar)
+        bar = self.query_one("#bar", Static)
+        pct = self.query_one("#pct", Static)
 
         if not url:
             log.write_line("Please paste a valid URL before downloading")
@@ -122,7 +151,8 @@ class EveryDL(App):
             log.write_line("Please select a download format first.")
             return
 
-        bar.update(progress=0)
+        bar.update(self._render_bar(0.0))
+        pct.update(self._render_pct(0.0))
         button.disabled = True
 
         log.write_line("")
@@ -142,6 +172,7 @@ class EveryDL(App):
             self.call_from_thread(self.update_progress, data)
 
         self._last_logged = -10.0
+        self._progress_files = {}
         try:
             result = await asyncio.to_thread(
                 download,
@@ -171,29 +202,34 @@ class EveryDL(App):
     def update_progress(self, data: dict) -> None:
 
         if data.get("status") == "downloading":
-
+            key = data.get("filename") or "main"
             total = (
                 data.get("total_bytes")
                 or data.get("total_bytes_estimate")
                 or 0
             )
-
             downloaded = data.get("downloaded_bytes", 0)
-            percentage = None
 
             if total:
-                percentage = downloaded / total * 100
+                self._progress_files[key] = (downloaded, total)
+                overall_done = sum(d for d, _ in self._progress_files.values())
+                overall_total = sum(t for _, t in self._progress_files.values())
+                percentage = overall_done / overall_total * 100 if overall_total else None
             else:
                 try:
-                    percentage = float(
-                        data.get("_percent_str", "0%").strip().strip("%")
-                    )
+                    raw = data.get("_percent_str", "0%").strip().replace("~", "").strip().strip("%")
+                    percentage = float(raw)
                 except ValueError:
                     percentage = None
 
             if percentage is not None:
-                self.query_one("#bar", ProgressBar).update(
-                    progress=percentage
+                if percentage > 100:
+                    percentage = 100
+                self.query_one("#bar", Static).update(
+                    self._render_bar(percentage)
+                )
+                self.query_one("#pct", Static).update(
+                    self._render_pct(percentage)
                 )
 
                 if percentage - self._last_logged >= 5.0:
@@ -213,7 +249,8 @@ class EveryDL(App):
     def reset_interface(self, success: bool) -> None:
 
         if success:
-            self.query_one("#bar", ProgressBar).update(progress=100)
+            self.query_one("#bar", Static).update(self._render_bar(100.0))
+            self.query_one("#pct", Static).update(self._render_pct(100.0))
         self.query_one("#go", Button).disabled = False
 
     BINDINGS = [
@@ -231,5 +268,9 @@ class EveryDL(App):
 
         self.exit()
 
-if __name__ == "__main__":
+
+def main():
     EveryDL().run()
+
+if __name__ == "__main__":
+    main()

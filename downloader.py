@@ -1,4 +1,5 @@
 import argparse
+import sys
 import json
 import os
 import urllib.parse
@@ -41,6 +42,8 @@ def get_opts(mode, hook=None):
         "noprogress": True,
         "noplaylist": True,
     }
+    if getattr(sys, "frozen", False):
+        opts["ffmpeg_location"] = getattr(sys, "_MEIPASS", "")
     if mode == "audio":
         opts.update({
             "format": "bestaudio/best",
