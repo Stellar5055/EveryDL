@@ -7,10 +7,11 @@ from downloader import download
 class EveryDL(App):
     CSS = """
     Screen {
-      align: center middle; 
+      align: center top; 
       }
     #hero {
       width: 80%;
+      height: auto;
       text-align: center;
       margin: 1 0;
       text-style: bold;
@@ -21,6 +22,7 @@ class EveryDL(App):
     }
     #row {
       width: 80%;
+      height: auto;
       margin: 1 0;
     }
     #paste {
@@ -29,6 +31,7 @@ class EveryDL(App):
     }
     #actions {
       width: 80%;
+      height: auto;
       margin: 0 0 1 0;
       align: center middle;
     }
@@ -38,13 +41,14 @@ class EveryDL(App):
     }
     #barrow {
       width: 80%;
-      height: 1;
+      height: auto;
       margin: 1 0;
     }
     #bar {
       width: 1fr;
       height: 1;
       text-style: bold;
+      overflow: hidden;
     }
     #pct {
       width: 12;
@@ -60,15 +64,30 @@ class EveryDL(App):
 
     _last_logged: float = -10.0
     _progress_files: dict = {}
+    _last_pct: float = 0.0
+    _last_eta: str = "--:--"
 
     BAR_WIDTH = 120
 
+    def _bar_width(self) -> int:
+        # Fit the bar into the current terminal instead of a fixed 120.
+        # barrow is 80% of screen, minus the pct widget and margins.
+        if not self.size.width:
+            return 60
+        return max(20, min(EveryDL.BAR_WIDTH, int(self.size.width * 0.8) - 18))
+
     @staticmethod
-    def _render_bar(percentage: float) -> str:
-        width = EveryDL.BAR_WIDTH
+    def _render_bar(percentage: float, width: int) -> str:
         filled = int(round(percentage / 100 * width))
         filled = max(0, min(width, filled))
         return f"[cyan]{'█' * filled}[/][dim]{'░' * (width - filled)}[/]"
+
+    def _paint_bar(self, percentage: float, eta: str = "") -> None:
+        width = self._bar_width()
+        self.query_one("#bar", Static).update(self._render_bar(percentage, width))
+        self.query_one("#pct", Static).update(self._render_pct(percentage, eta))
+        self._last_pct = percentage
+        self._last_eta = eta
 
     @staticmethod
     def _render_pct(percentage: float, eta: str = "") -> str:
@@ -102,7 +121,7 @@ class EveryDL(App):
         )
 
         yield Horizontal(
-            Static(self._render_bar(0.0), id="bar"),
+            Static(self._render_bar(0.0, 60), id="bar"),
             Static(self._render_pct(0.0, eta="--:--"), id="pct"),
             id="barrow",
         )
@@ -140,8 +159,6 @@ class EveryDL(App):
 
         log = self.query_one("#log", Log)
         button = self.query_one("#go", Button)
-        bar = self.query_one("#bar", Static)
-        pct = self.query_one("#pct", Static)
 
         if not url:
             log.write_line("Please paste a valid URL before downloading")
@@ -151,8 +168,7 @@ class EveryDL(App):
             log.write_line("Please select a download format first.")
             return
 
-        bar.update(self._render_bar(0.0))
-        pct.update(self._render_pct(0.0, eta="--:--"))
+        self._paint_bar(0.0, "--:--")
         button.disabled = True
 
         log.write_line("")
@@ -225,12 +241,7 @@ class EveryDL(App):
             if percentage is not None:
                 if percentage > 100:
                     percentage = 100
-                self.query_one("#bar", Static).update(
-                    self._render_bar(percentage)
-                )
-                self.query_one("#pct", Static).update(
-                    self._render_pct(percentage, data.get("_eta_str", "").strip())
-                )
+                self._paint_bar(percentage, data.get("_eta_str", "").strip())
 
                 if percentage - self._last_logged >= 5.0:
                     self._last_logged = percentage
@@ -249,9 +260,12 @@ class EveryDL(App):
     def reset_interface(self, success: bool) -> None:
 
         if success:
-            self.query_one("#bar", Static).update(self._render_bar(100.0))
-            self.query_one("#pct", Static).update(self._render_pct(100.0, "--:--"))
+            self._paint_bar(100.0, "--:--")
         self.query_one("#go", Button).disabled = False
+
+    def on_resize(self) -> None:
+        # Re-fit the bar when the terminal is resized mid-download.
+        self._paint_bar(self._last_pct, self._last_eta)
 
     BINDINGS = [
         ("q", "request_quit", "Quit")

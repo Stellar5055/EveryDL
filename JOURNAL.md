@@ -45,4 +45,6 @@
 
 - Evening i resumed working on this. first I did some small distribution fixes which my agent recomended me to do - I made it so that in my computer, if i run ```uv tool install -e``` . then i can run ```everydl``` command everywhere to open the app, just kind of preperation for the exe final version. Then there was a series of errors regarding the progress bar, spend a long time triying stuff on my iown, then decided to ask agent. agent suggested to use a classic static progress bar instead of the textual one. did that it works. then i spent some time working on resizing the bar and like spacing etc.
 
-- Then I added an eta display to the tui progress bar also.
+- Then I added an eta display to the tui progress bar also. Then worked on the pyinstaller setup and ffmpeg bundling to get a single clean exe. got some problems, all resolved. Then i noticed from earlier, that the tui looked broken at some like sizes of terminal and if i am not in fullscreen, so i asked my agnet to fix that then understood what it did. Screenshot of UI now:
+
+![TUI at the end of Day 3](image-9.png)
