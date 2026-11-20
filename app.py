@@ -47,7 +47,7 @@ class EveryDL(App):
       text-style: bold;
     }
     #pct {
-      width: 8;
+      width: 20;
       height: 1;
       text-align: right;
       text-style: bold;
@@ -71,8 +71,8 @@ class EveryDL(App):
         return f"[cyan]{'█' * filled}[/][dim]{'░' * (width - filled)}[/]"
 
     @staticmethod
-    def _render_pct(percentage: float) -> str:
-        return f"{percentage:5.1f}%"
+    def _render_pct(percentage: float, eta: str = "") -> str:
+        return f"{percentage:5.1f}% {eta}"
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -103,7 +103,7 @@ class EveryDL(App):
 
         yield Horizontal(
             Static(self._render_bar(0.0), id="bar"),
-            Static(self._render_pct(0.0), id="pct"),
+            Static(self._render_pct(0.0, eta="--:--"), id="pct"),
             id="barrow",
         )
         yield Log(id="log")
@@ -152,7 +152,7 @@ class EveryDL(App):
             return
 
         bar.update(self._render_bar(0.0))
-        pct.update(self._render_pct(0.0))
+        pct.update(self._render_pct(0.0, eta="--:--"))
         button.disabled = True
 
         log.write_line("")
@@ -229,7 +229,7 @@ class EveryDL(App):
                     self._render_bar(percentage)
                 )
                 self.query_one("#pct", Static).update(
-                    self._render_pct(percentage)
+                    self._render_pct(percentage, data.get("_eta_str", "").strip())
                 )
 
                 if percentage - self._last_logged >= 5.0:
@@ -250,7 +250,7 @@ class EveryDL(App):
 
         if success:
             self.query_one("#bar", Static).update(self._render_bar(100.0))
-            self.query_one("#pct", Static).update(self._render_pct(100.0))
+            self.query_one("#pct", Static).update(self._render_pct(100.0, "--:--"))
         self.query_one("#go", Button).disabled = False
 
     BINDINGS = [
