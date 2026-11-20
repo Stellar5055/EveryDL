@@ -33,3 +33,12 @@
 - I am going to stop for today, so status is - the baisic TUI is complete its not beautifull or nything, and its not perfect, i will make a lot of changes. another problem is if i try to download a playlist, it only downlaods first one on that. need to fix that also tomorrow. Screenshot of current TUI:
 
 ![TUI base version](image-7.png)
+
+
+## Day 3
+
+- In the morning, Iasked the agent for plans for a paste button, exit button and a hero on the top, after looking at it, I managed to almost do the exit and paste on my own, i have use pyperclip before and the exit button was not too bad, the only problem i faced was to liek gracefully stop any downloads if there, had to follow a tutorial for that. I asked agent is it ok, it found 3 errors mainly, small ones, told \it to fix them, tahst done
+
+- Now I tested it, the bottons work. then i made the hero, but coudnt figure out how to increase the size or anytjhing, agent told not possible. earlier i had looked into trying to put images but taht also wouldnt work - so keep it for now i guess. Screenshot of currrnt TUI:
+
+![UI with hero, exit and paste buttons](image-8.png)

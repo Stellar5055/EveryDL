@@ -1,6 +1,7 @@
-import asyncio
+import asyncio, pyperclip, threading
 from textual.app import ComposeResult, App
-from textual.widgets import Select, ProgressBar, Log, Button, Input, Header, Footer
+from textual.widgets import Select, ProgressBar, Log, Button, Input, Header, Footer, Static
+from textual.containers import Horizontal
 from downloader import download
 
 class EveryDL(App):
@@ -8,9 +9,28 @@ class EveryDL(App):
     Screen {
       align: center middle; 
       }
-    #url {
+    #hero {
       width: 80%;
+      text-align: center;
+      margin: 1 0;
+      text-style: bold;
+    }
+    #url {
+      width: 1fr;
       margin: 1 0; 
+    }
+    #row {
+      width: 80%;
+      margin: 1 0;
+    }
+    #paste {
+      width: 12;
+      margin: 1 0 1 1;
+    }
+    #actions {
+      width: 80%;
+      margin: 0 0 1 0;
+      align: center middle;
     }
     #log {
       width: 80%;
@@ -33,9 +53,12 @@ class EveryDL(App):
     def compose(self) -> ComposeResult:
         yield Header()
 
-        yield Input(
-            placeholder="Paste URL...",
-            id="url"
+        yield Static("[bold white]Every[/][bold purple]DL[/]", id="hero")
+
+        yield Horizontal(
+            Input(placeholder="Paste a URL...", id="url"),
+            Button("Paste", id="paste"),
+            id="row"
         )
 
         yield Select(
@@ -48,12 +71,39 @@ class EveryDL(App):
             id="mode",
         )
 
-        yield Button("Start Download", id="go")
+        yield Horizontal(
+            Button("Start Download", id="go"),
+            Button("Exit", id="quit"),
+            id="actions"
+        )
+
         yield ProgressBar(total=100, id="bar")
         yield Log(id="log")
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+
+        log = self.query_one("#log", Log)
+
+        if event.button.id == "paste":
+            try:
+                clipboard = pyperclip.paste().strip()
+            except Exception:
+                clipboard = ""
+
+            if clipboard:
+                self.query_one("#url", Input).value = clipboard
+                log.write_line("Pasted from clipboard")
+
+            else:
+                log.write_line("Clipboard empty")
+
+            return
+
+        if event.button.id == "quit":
+            self.action_request_quit()
+            return
+        
         if event.button.id != "go":
             return
 
@@ -79,8 +129,9 @@ class EveryDL(App):
         log.write_line("Getting things ready...")
         log.write_line(f"URL: {url}")
         log.write_line(f"Selected format: {mode}")
+        self._cancel_download.clear()
 
-        self.run_worker(
+        self._download_worker = self.run_worker(
             self.do_download(url, mode),
             exclusive=True,
         )
@@ -97,6 +148,7 @@ class EveryDL(App):
                 url,
                 mode,
                 progress_hook,
+                self._cancel_download,
             )
 
             if result == 0:
@@ -164,7 +216,20 @@ class EveryDL(App):
             self.query_one("#bar", ProgressBar).update(progress=100)
         self.query_one("#go", Button).disabled = False
 
+    BINDINGS = [
+        ("q", "request_quit", "Quit")
+    ]
+
+    _cancel_download = threading.Event()
+    _download_worker = None
+
+    def action_request_quit(self):
+        self._cancel_download.set()
+
+        if self._download_worker:
+            self._download_worker.cancel()
+
+        self.exit()
+
 if __name__ == "__main__":
     EveryDL().run()
-
-        

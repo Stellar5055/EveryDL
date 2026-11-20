@@ -62,7 +62,7 @@ def get_opts(mode, hook=None):
         })
     return opts
 
-def download(url, mode, hook=None):
+def download(url, mode, hook=None, cancel_event=None):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     if is_spotify(url):
         try:
@@ -71,9 +71,17 @@ def download(url, mode, hook=None):
             print(f"\nCould not read Spotify link: {e}")
             return 1
     try:
-        with yt_dlp.YoutubeDL(get_opts(mode, hook)) as ydl:
+        def checked_hook(data):
+            if cancel_event and cancel_event.is_set():
+                raise Exception("Download cancelled")
+            if hook:
+                hook(data)
+            else:
+                progress_hook(data)
+
+        with yt_dlp.YoutubeDL(get_opts(mode, checked_hook)) as ydl:
             return ydl.download([url])
-    except yt_dlp.utils.DownloadError as e:
+    except Exception as e:
         print(f"\nDownload failed: {e}")
         return 1
 
