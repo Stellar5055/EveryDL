@@ -1,4 +1,4 @@
-import asyncio, pyperclip, threading
+import asyncio, os, pyperclip, threading
 from textual.app import ComposeResult, App
 from textual.widgets import Select, Log, Button, Input, Header, Footer, Static
 from textual.containers import Horizontal
@@ -47,7 +47,7 @@ class EveryDL(App):
       text-style: bold;
     }
     #pct {
-      width: 20;
+      width: 12;
       height: 1;
       text-align: right;
       text-style: bold;
@@ -271,6 +271,10 @@ class EveryDL(App):
 
 def main():
     EveryDL().run()
+    # yt-dlp runs in a non-daemon worker thread. Textual's exit() stops
+    # the UI loop but that thread can keep the process alive, leaving the
+    # console window open. Force-terminate once the UI is gone.
+    os._exit(0)
 
 if __name__ == "__main__":
     main()

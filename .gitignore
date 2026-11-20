@@ -4,3 +4,6 @@ __pycache__/
 everydl.egg-info/
 dist/
 build/
+ffmpeg.exe
+ffmpeg-*-essentials_build/
+*.spec
