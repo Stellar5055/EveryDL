@@ -6,7 +6,9 @@ A simple TUI app for downloading audio and video from many sites like youtube an
 
 ## DEMO
 
-[Demo of the App](media/demo.mp4)
+
+https://github.com/user-attachments/assets/2d1f8d21-af0f-4491-86c5-ab4a263b8f50
+
 
 ## What it does
 
