@@ -1,8 +1,66 @@
 import asyncio, os, pyperclip, threading
 from textual.app import ComposeResult, App
-from textual.widgets import Select, Log, Button, Input, Header, Footer, Static
-from textual.containers import Horizontal
-from downloader import download
+from textual.widgets import Select, Log, Button, Input, Header, Footer, Static, Label
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from downloader import download, get_playlist_entries, download_selection, is_spotify_playlist, spotify_creds_available
+from textual.screen import ModalScreen
+
+class PlaylistModal(ModalScreen):
+    def __init__(self, entries):
+        super().__init__()
+        self.entries = entries
+
+    def compose(self):
+        listing = "\n".join(
+            f"{n}. {e.get('title', 'Unknown title')}"
+            for n, e in enumerate(self.entries, start=1)
+        )
+
+        with Vertical(id="dialog"):
+            yield Label(
+                f"Playlist: {len(self.entries)} videos", id="dlg-title"
+            )
+
+            with VerticalScroll(id="dlg-list"):
+                yield Label(listing, id="dlg-items")
+
+            yield Button("Latest only", id="first")
+            yield Button(f"All {len(self.entries)}", id="all")
+
+            yield Input(
+                placeholder="e.g. 1,5,8",
+                id="selection"
+            )
+
+            yield Button("Download selected", id="selected")
+            yield Button("Cancel", id="cancel")
+
+    def on_button_pressed(self, event):
+        if event.button.id == "first":
+            self.dismiss([0])
+        elif event.button.id == "all":
+            self.dismiss(list(range(len(self.entries))))
+        elif event.button.id == "selected":
+            text = self.query_one("#selection", Input).value
+
+            indices = []
+
+            for item in text.split(","):
+                try:
+                    index = int(item.strip()) - 1
+
+                    if 0 <= index < len(self.entries):
+                        if index not in indices:
+                            indices.append(index)
+
+                except ValueError:
+                    continue
+            if indices:
+                self.dismiss(indices)
+            else:
+                self.dismiss("invalid")
+        elif event.button.id == "cancel":
+            self.dismiss(None)
 
 class EveryDL(App):
     CSS = """
@@ -51,10 +109,41 @@ class EveryDL(App):
       overflow: hidden;
     }
     #pct {
-      width: 12;
+      width: 16;
       height: 1;
       text-align: right;
       text-style: bold;
+    }
+    PlaylistModal {
+      align: center middle;
+    }
+    #dialog {
+      width: 70%;
+      max-width: 80;
+      height: auto;
+      max-height: 80%;
+      background: $surface;
+      border: thick $primary;
+      padding: 1 2;
+    }
+    #dlg-title {
+      width: 100%;
+      text-align: center;
+      text-style: bold;
+      margin-bottom: 1;
+    }
+    #dlg-list {
+      width: 100%;
+      height: 10;
+      margin-bottom: 1;
+    }
+    #dlg-items {
+      width: 100%;
+      text-align: left;
+    }
+    #dialog Button, #dialog Input {
+      width: 100%;
+      margin: 0 0 1 0;
     }
     #mode {
       width: 80%;
@@ -185,33 +274,77 @@ class EveryDL(App):
     async def do_download(self, url: str, mode: str) -> None:
 
         def progress_hook(data):
-            self.call_from_thread(self.update_progress, data)
+            self.call_from_thread(
+                self.update_progress, data
+            )
 
         self._last_logged = -10.0
         self._progress_files = {}
+
         try:
-            result = await asyncio.to_thread(
-                download,
-                url,
-                mode,
-                progress_hook,
-                self._cancel_download,
+            entries = await asyncio.to_thread(
+                get_playlist_entries, url
             )
+            if not entries:
+                if is_spotify_playlist(url) and not spotify_creds_available():
+                    self.query_one("#log", Log).write_line(
+                        "Spotify playlist needs SPOTIFY_ID/SPOTIFY_SECRET - "
+                        "downloading first match only..."
+                    )
+                else:
+                    self.query_one("#log", Log).write_line(
+                        "Not a playlist or empty playlist. "
+                        "Starting single download..."
+                    )
+
+                result = await asyncio.to_thread(
+                    download,
+                    url,
+                    mode,
+                    progress_hook,
+                    self._cancel_download,
+                )
+
+            else:
+                # Show the playlist selection modal.
+                indices = await self.push_screen_wait(
+                    PlaylistModal(entries)
+                )
+
+                if indices == "invalid":
+                    self.query_one("#log", Log).write_line("No valid video numbers selected")
+                    self.reset_interface(False)
+                    return
+
+                if not indices:
+                    self.reset_interface(False)
+                    return
+
+                result = await asyncio.to_thread(
+                    download_selection,
+                    url,
+                    mode,
+                    progress_hook,
+                    indices,
+                    entries,
+                    self._cancel_download,
+                )
 
             if result == 0:
                 self.query_one("#log", Log).write_line(
-                    "The Download was completed successfully",
+                    "The Download was completed successfully"
                 )
                 self.reset_interface(True)
+
             else:
                 self.query_one("#log", Log).write_line(
-                    "Download failed. Check URL or try again.",
+                    "Download failed. Check URL or try again."
                 )
                 self.reset_interface(False)
 
         except Exception as error:
             self.query_one("#log", Log).write_line(
-                f"Something went wrong. Error: {error}",
+                f"Something went wrong. Error: {error}"
             )
             self.reset_interface(False)
 
@@ -251,6 +384,19 @@ class EveryDL(App):
                     self.query_one("#log", Log).write_line(
                         f"Downloading: {percent} | Time Left: {eta}"
                     )
+
+        elif data.get("status") == "playlist_item":
+            self._progress_files = {}
+            self._last_logged = -10.0
+            self._paint_bar(0.0, "--:--")
+            self.query_one("#log", Log).write_line(
+                f"Video {data.get('number')}/{data.get('total')}: {data.get('title')}"
+            )
+
+        elif data.get("status") == "playlist_item_failed":
+            self.query_one("#log", Log).write_line(
+                f"Failed: {data.get('title')}"
+            )
 
         elif data.get("status") == "finished":
             self.query_one("#log", Log).write_line(

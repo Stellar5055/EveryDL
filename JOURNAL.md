@@ -48,3 +48,8 @@
 - Then I added an eta display to the tui progress bar also. Then worked on the pyinstaller setup and ffmpeg bundling to get a single clean exe. got some problems, all resolved. Then i noticed from earlier, that the tui looked broken at some like sizes of terminal and if i am not in fullscreen, so i asked my agnet to fix that then understood what it did. Screenshot of UI now:
 
 ![TUI at the end of Day 3](image-9.png)
+
+
+## Day 4
+
+- Today i started working on adding playlist support. my plan was to have 3 modes to download latest item in a playlist or all or customs e
