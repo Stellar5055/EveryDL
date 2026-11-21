@@ -1,4 +1,4 @@
-import asyncio, os, pyperclip, threading
+import asyncio, os, pyperclip, re, threading
 from textual import events
 from textual.app import ComposeResult, App
 from textual.widgets import Select, Log, Button, Input, Header, Footer, Static, Label
@@ -187,8 +187,12 @@ class EveryDL(App):
         self._last_eta = eta
 
     @staticmethod
+    def _clean(s: str) -> str:
+        return re.sub(r"\x1b\[[0-9;]*m", "", s or "").strip()
+
+    @staticmethod
     def _render_pct(percentage: float, eta: str = "") -> str:
-        return f"{percentage:5.1f}% {eta}"
+        return f"{percentage:5.1f}% {EveryDL._clean(eta)}"
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -368,7 +372,7 @@ class EveryDL(App):
                 percentage = overall_done / overall_total * 100 if overall_total else None
             else:
                 try:
-                    raw = data.get("_percent_str", "0%").strip().replace("~", "").strip().strip("%")
+                    raw = self._clean(data.get("_percent_str", "0%")).replace("~", "").strip().strip("%")
                     percentage = float(raw)
                 except ValueError:
                     percentage = None
@@ -376,12 +380,12 @@ class EveryDL(App):
             if percentage is not None:
                 if percentage > 100:
                     percentage = 100
-                self._paint_bar(percentage, data.get("_eta_str", "").strip())
+                self._paint_bar(percentage, self._clean(data.get("_eta_str", "")))
 
                 if percentage - self._last_logged >= 5.0:
                     self._last_logged = percentage
-                    percent = data.get("_percent_str", "").strip()
-                    eta = data.get("_eta_str", "").strip()
+                    percent = self._clean(data.get("_percent_str", ""))
+                    eta = self._clean(data.get("_eta_str", ""))
 
                     self.query_one("#log", Log).write_line(
                         f"Downloading: {percent} | Time Left: {eta}"

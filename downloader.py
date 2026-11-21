@@ -13,8 +13,8 @@ OUTTMPL = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
 
 def progress_hook(d):
     if d["status"] == "downloading":
-        percent = d.get("_percent_str", "N/A").strip()
-        eta = d.get("_eta_str", "N/A").strip()
+        percent = re.sub(r"\x1b\[[0-9;]*m", "", d.get("_percent_str", "N/A")).strip()
+        eta = re.sub(r"\x1b\[[0-9;]*m", "", d.get("_eta_str", "N/A")).strip()
         print(f"\r{percent} | ETA: {eta}", end="", flush=True)
 
     elif d["status"] == "finished":
