@@ -1,0 +1,88 @@
+name: CI
+
+on:
+    push:
+    pull_request:
+    workflow_dispatch:
+
+jobs:
+    check:
+        runs-on: windows-latest
+    
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: "3.12"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v6
+
+            - name: Install deps
+              run: uv pip install --system yt-dlp textual pyperclip
+
+            - name: Check imports
+              run: python -c "import app, downloader"
+
+            - name: Check downloader help
+              run: python downloader.py --help
+
+            - name: Check syntax
+              run: python -m py_compile app.py downloader.py
+
+    release:
+        needs: [check]
+        if: github.ref == 'refs/heads/master'
+        runs-on: windows-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: "3.12"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v6
+
+            - name: Install deps
+              run: uv pip install --system yt-dlp textual pyperclip pyinstaller pillow
+
+            - name: Fetch ffmpeg essentials
+              shell: pwsh
+              run: |
+                Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+                Expand-Archive -Path "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ff"
+                Copy-Item (Get-ChildItem "$env:RUNNER_TEMP\ff" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName -Destination ".\ffmpeg.exe"
+
+            - name: Build exe
+              run: python -m PyInstaller --onefile --name EveryDL --console --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module test --add-binary "ffmpeg.exe;." --icon EveryDL.ico app.py
+
+            - name: Resolve target release
+              id: rel
+              shell: pwsh
+              run: |
+                $tag = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+                if (-not $tag) {
+                  $tag = 'nightly'
+                  gh release create $tag --prerelease --title 'Nightly build' --notes 'Automatic build from master.'
+                }
+                echo "tag=$tag" >> $env:GITHUB_OUTPUT
+              env:
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload exe to latest release
+              shell: pwsh
+              run: gh release upload "${{ steps.rel.outputs.tag }}" dist\EveryDL.exe --clobber
+              env:
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            
+            
+
+
