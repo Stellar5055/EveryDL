@@ -1,9 +1,8 @@
 import argparse
-import base64
 import sys
-import time
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 import yt_dlp
@@ -97,65 +96,33 @@ def is_spotify_playlist(url):
     return len(parts) >= 2 and parts[0] in ("playlist", "album")
 
 
-def spotify_creds_available():
-    return bool(os.environ.get("SPOTIFY_ID") and os.environ.get("SPOTIFY_SECRET"))
-
-
-_spotify_token = {"value": None, "expires": 0}
-
-
-def _spotify_token_value():
-    if time.time() < _spotify_token["expires"]:
-        return _spotify_token["value"]
-    client_id = os.environ.get("SPOTIFY_ID", "")
-    client_secret = os.environ.get("SPOTIFY_SECRET", "")
-    basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    data = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
-    req = urllib.request.Request(
-        "https://accounts.spotify.com/api/token", data=data,
-        headers={"Authorization": f"Basic {basic}"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        token = json.loads(r.read().decode())
-    _spotify_token["value"] = token["access_token"]
-    _spotify_token["expires"] = time.time() + token.get("expires_in", 3600) - 60
-    return _spotify_token["value"]
-
-
 def get_spotify_playlist_entries(url, limit=100):
-    # Public playlists/albums only, via client-credentials token. No DRM bypass:
-    # each track becomes a YouTube search, same as single-track fallback.
+    # No API key. The public embed page server-renders its track rows as HTML:
+    # number, title, artist, duration per row. Same fallback as single tracks:
+    # each row becomes a YouTube search.
     parts = urllib.parse.urlparse(url).path.strip("/").split("/")
     kind, spotify_id = parts[0], parts[1]
-    endpoint = "playlists" if kind == "playlist" else "albums"
-    token = _spotify_token_value()
+    embed = f"https://open.spotify.com/embed/{kind}/{spotify_id}"
+    req = urllib.request.Request(embed, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        html = r.read().decode("utf-8", errors="replace")
+    text = re.sub(r"<[^>]+>", "|", html)
     entries = []
-    offset = 0
-    while len(entries) < limit:
-        page = min(50, limit - len(entries))
-        api = (f"https://api.spotify.com/v1/{endpoint}/{spotify_id}/tracks"
-               f"?limit={page}&offset={offset}")
-        req = urllib.request.Request(api, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode())
-        for item in data.get("items", []):
-            track = item.get("track") if kind == "playlist" else item
-            if not track or not track.get("name"):
-                continue
-            artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
-            query = f"{artists} - {track['name']}".strip(" -")
-            entries.append({"title": query, "url": f"ytsearch1:{query}"})
-        if not data.get("next"):
+    expected = 1
+    for m in re.finditer(r"(\d{1,4})\|{2,}([^|]*?)\|{2,}([^|]*?)\|{2,}(\d{1,3}:\d{2})", text):
+        number, title, artist = int(m.group(1)), m.group(2).strip(), m.group(3).strip()
+        if number != expected or not title:
+            continue
+        expected += 1
+        query = f"{artist} - {title}".strip(" -") if artist else title
+        entries.append({"title": query, "url": f"ytsearch1:{query}"})
+        if len(entries) >= limit:
             break
-        offset += page
     return entries
 
 
 def get_playlist_entries(url):
     if is_spotify_playlist(url):
-        if not spotify_creds_available():
-            print("Set SPOTIFY_ID/SPOTIFY_SECRET env vars for full Spotify playlist support.")
-            return None
         try:
             return get_spotify_playlist_entries(url) or None
         except Exception as e:
@@ -229,7 +196,9 @@ def download_selection(url, mode, hook, indices, entries=None, cancel_event=None
         }, f"\nVideo {number}/{len(valid)}: {title}")
 
         video_url = entry.get("url")
-        if video_url and not video_url.startswith("http"):
+        if video_url and re.match(r"^[A-Za-z0-9_-]{11}$", video_url):
+            # Bare YouTube id from flat extraction; everything else
+            # (full URLs, ytsearch1:, scsearch:) passes through untouched.
             video_url = f"https://www.youtube.com/watch?v={video_url}"
 
         result = download(

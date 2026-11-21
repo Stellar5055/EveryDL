@@ -1,8 +1,9 @@
 import asyncio, os, pyperclip, threading
+from textual import events
 from textual.app import ComposeResult, App
 from textual.widgets import Select, Log, Button, Input, Header, Footer, Static, Label
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from downloader import download, get_playlist_entries, download_selection, is_spotify_playlist, spotify_creds_available
+from downloader import download, get_playlist_entries, download_selection
 from textual.screen import ModalScreen
 
 class PlaylistModal(ModalScreen):
@@ -104,6 +105,7 @@ class EveryDL(App):
     }
     #bar {
       width: 1fr;
+      min-width: 0;
       height: 1;
       text-style: bold;
       overflow: hidden;
@@ -156,14 +158,20 @@ class EveryDL(App):
     _last_pct: float = 0.0
     _last_eta: str = "--:--"
 
-    BAR_WIDTH = 120
+    BAR_WIDTH = 200
 
     def _bar_width(self) -> int:
-        # Fit the bar into the current terminal instead of a fixed 120.
+        # Fit the bar into the current terminal instead of a fixed width.
         # barrow is 80% of screen, minus the pct widget and margins.
-        if not self.size.width:
+        # screen.size is used (not self.size) so the value is fresh
+        # even when App-level resize events don't fire.
+        try:
+            screen_width = self.screen.size.width
+        except Exception:
+            screen_width = 0
+        if not screen_width:
             return 60
-        return max(20, min(EveryDL.BAR_WIDTH, int(self.size.width * 0.8) - 18))
+        return max(20, min(EveryDL.BAR_WIDTH, int(screen_width * 0.8) - 18))
 
     @staticmethod
     def _render_bar(percentage: float, width: int) -> str:
@@ -286,16 +294,10 @@ class EveryDL(App):
                 get_playlist_entries, url
             )
             if not entries:
-                if is_spotify_playlist(url) and not spotify_creds_available():
-                    self.query_one("#log", Log).write_line(
-                        "Spotify playlist needs SPOTIFY_ID/SPOTIFY_SECRET - "
-                        "downloading first match only..."
-                    )
-                else:
-                    self.query_one("#log", Log).write_line(
-                        "Not a playlist or empty playlist. "
-                        "Starting single download..."
-                    )
+                self.query_one("#log", Log).write_line(
+                    "Not a playlist or empty playlist. "
+                    "Starting single download..."
+                )
 
                 result = await asyncio.to_thread(
                     download,
@@ -409,9 +411,13 @@ class EveryDL(App):
             self._paint_bar(100.0, "--:--")
         self.query_one("#go", Button).disabled = False
 
-    def on_resize(self) -> None:
-        # Re-fit the bar when the terminal is resized mid-download.
-        self._paint_bar(self._last_pct, self._last_eta)
+    def on_resize(self, event: events.Resize) -> None:
+        # event.size is the NEW size; self.size can still hold the old one
+        # when this runs, which is why grow-back used to stay reduced.
+        # Repaint directly from the event instead of _paint_bar().
+        width = max(20, min(EveryDL.BAR_WIDTH, int(event.size.width * 0.8) - 18))
+        self.query_one("#bar", Static).update(self._render_bar(self._last_pct, width))
+        self.query_one("#pct", Static).update(self._render_pct(self._last_pct, self._last_eta))
 
     BINDINGS = [
         ("q", "request_quit", "Quit")
