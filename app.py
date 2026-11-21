@@ -3,7 +3,7 @@ from textual import events
 from textual.app import ComposeResult, App
 from textual.widgets import Select, Log, Button, Input, Header, Footer, Static, Label
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from downloader import download, get_playlist_entries, download_selection
+from downloader import download, get_playlist_entries, download_selection, _paused, _skip
 from textual.screen import ModalScreen
 
 class PlaylistModal(ModalScreen):
@@ -98,6 +98,12 @@ class EveryDL(App):
       width: 80%;
       height: 10; 
     }
+    #controls {
+    width: 80%;
+    height: auto;
+    margin: 1 0;
+    align: center middle;
+    }
     #barrow {
       width: 80%;
       height: auto;
@@ -157,6 +163,7 @@ class EveryDL(App):
     _progress_files: dict = {}
     _last_pct: float = 0.0
     _last_eta: str = "--:--"
+    _is_playlist = False
 
     BAR_WIDTH = 200
 
@@ -227,6 +234,14 @@ class EveryDL(App):
             id="barrow",
         )
         yield Log(id="log")
+
+        yield Horizontal(
+            Button("Pause", id="pause", disabled=True),
+            Button("Stop", id="stop", disabled=True),
+            Button("Skip", id="skip", disabled=True),
+            id="controls",
+        )
+
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -251,6 +266,40 @@ class EveryDL(App):
         if event.button.id == "quit":
             self.action_request_quit()
             return
+
+        if event.button.id == "pause":
+            pause_button = self.query_one("#pause", Button)
+
+            if _paused.is_set():
+                _paused.clear()
+                pause_button.label = "Pause"
+                log.write_line("Resumed")
+            else:
+                _paused.set()
+                pause_button.label = "Unpause"
+                log.write_line("Paused")
+
+            return
+        
+        if event.button.id == "stop":
+            self._cancel_download.set()
+            _paused.clear()
+            _skip.clear()
+
+            self.query_one("#pause", Button).disabled = True
+            self.query_one("#skip", Button).disabled = True
+            self.query_one("#stop", Button).disabled = True
+
+            log.write_line("Stopping download...")
+
+            return
+
+        if event.button.id == "skip":
+            if self._is_playlist:
+                _skip.set()
+                log.write_line("Skipping current item...")
+            return
+        
         
         if event.button.id != "go":
             return
@@ -278,6 +327,17 @@ class EveryDL(App):
         log.write_line(f"Selected format: {mode}")
         self._cancel_download.clear()
 
+        _paused.clear()
+        _skip.clear()
+        self._is_playlist = False
+
+        pause_button = self.query_one("#pause", Button)
+        pause_button.label = "Pause"
+        pause_button.disabled = False
+
+        self.query_one("#stop", Button).disabled = False
+        self.query_one("#skip", Button).disabled = True
+
         self._download_worker = self.run_worker(
             self.do_download(url, mode),
             exclusive=True,
@@ -297,6 +357,12 @@ class EveryDL(App):
             entries = await asyncio.to_thread(
                 get_playlist_entries, url
             )
+
+            if self._cancel_download.is_set():
+                self.query_one("#log", Log).write_line("Download stopped.")
+                self.reset_interface(False)
+                return
+            
             if not entries:
                 self.query_one("#log", Log).write_line(
                     "Not a playlist or empty playlist. "
@@ -326,6 +392,9 @@ class EveryDL(App):
                     self.reset_interface(False)
                     return
 
+                self._is_playlist = True
+                self.query_one("#skip", Button).disabled = len(indices) <= 1
+
                 result = await asyncio.to_thread(
                     download_selection,
                     url,
@@ -336,7 +405,11 @@ class EveryDL(App):
                     self._cancel_download,
                 )
 
-            if result == 0:
+            if self._cancel_download.is_set():
+                self.query_one("#log", Log).write_line("Download stopped.")
+                self.reset_interface(False)
+
+            elif result == 0:
                 self.query_one("#log", Log).write_line(
                     "The Download was completed successfully"
                 )
@@ -404,6 +477,9 @@ class EveryDL(App):
                 f"Failed: {data.get('title')}"
             )
 
+        elif data.get("status") == "playlist_item_skipped":
+            self.query_one("#log", Log).write_line(f"Skipped: {data.get('title')}")
+
         elif data.get("status") == "finished":
             self.query_one("#log", Log).write_line(
                 "Download complete. Processing the file..."
@@ -413,12 +489,25 @@ class EveryDL(App):
 
         if success:
             self._paint_bar(100.0, "--:--")
+        else:
+            self._progress_files = {}
+            self._paint_bar(0.0, "--:--")
         self.query_one("#go", Button).disabled = False
 
+        pause_button = self.query_one("#pause", Button)
+        pause_button.disabled = True
+        pause_button.label = "Pause"
+
+        self.query_one("#stop", Button).disabled = True
+        self.query_one("#skip", Button).disabled = True
+
+        _paused.clear()
+        _skip.clear()
+        self._cancel_download.clear()
+        self._is_playlist = False
+
+
     def on_resize(self, event: events.Resize) -> None:
-        # event.size is the NEW size; self.size can still hold the old one
-        # when this runs, which is why grow-back used to stay reduced.
-        # Repaint directly from the event instead of _paint_bar().
         width = max(20, min(EveryDL.BAR_WIDTH, int(event.size.width * 0.8) - 18))
         self.query_one("#bar", Static).update(self._render_bar(self._last_pct, width))
         self.query_one("#pct", Static).update(self._render_pct(self._last_pct, self._last_eta))
