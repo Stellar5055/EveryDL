@@ -52,4 +52,8 @@
 
 ## Day 4
 
-- Today i started working on adding playlist support. my plan was to have 3 modes to download latest item in a playlist or all or customs e
+- Today i started working on adding playlist support. my plan was to have 3 modes to download latest item in a playlist or all or customs selection. Implemented that, then there was a series of problems. this part i vibecoded through it a lot since these were like classic/simple errors. this didnt turn out that well because my agent randomly changed spotify system from using yt dlp to using a spotify api which i couldnt get for free. reverted it when i found out and then continued
+
+- After that, later, another issue came up which was the progressbar size was going randomly wierd when resizing window. fixed it with agent. then during that fix, the eta stopped showing, fixed that too.
+
+- Now I started working manually on control buttons - Pause/Resume, Stop, Skip(skips the current item from a playlist). told agent to evalute. it found 2 big bugs - it fixed both. then i told agent to alos make the progress bar and other stast clear when i click stop download.

@@ -6,10 +6,18 @@ import re
 import urllib.parse
 import urllib.request
 import yt_dlp
+import threading
+import time
 
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads/EveryDL/")
 
 OUTTMPL = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
+
+_paused = threading.Event()
+_skip = threading.Event()
+
+class _SkipItem(Exception):
+    pass
 
 def progress_hook(d):
     if d["status"] == "downloading":
@@ -76,18 +84,30 @@ def download(url, mode, hook=None, cancel_event=None):
             return 1
     try:
         def checked_hook(data):
+            while (_paused.is_set() and not (cancel_event and cancel_event.is_set())):
+                time.sleep(0.2)
+
             if cancel_event and cancel_event.is_set():
                 raise Exception("Download cancelled")
+
+            if _skip.is_set():
+                raise _SkipItem()
+
             if hook:
                 hook(data)
             else:
                 progress_hook(data)
+                
 
         with yt_dlp.YoutubeDL(get_opts(mode, checked_hook)) as ydl:
             return ydl.download([url])
+
+    except _SkipItem:
+        return 2
     except Exception as e:
-        print(f"\nDownload failed: {e}")
+        print(f"\nDownload Failed: {e}")
         return 1
+    
 
 def is_spotify_playlist(url):
     if "open.spotify.com" not in url:
@@ -185,6 +205,9 @@ def download_selection(url, mode, hook, indices, entries=None, cancel_event=None
     for number, index in enumerate(valid, start=1):
         if cancel_event and cancel_event.is_set():
             return 1
+
+        _skip.clear()
+        
         entry = entries[index]
         title = entry.get("title", "Unknown title")
 
@@ -201,17 +224,26 @@ def download_selection(url, mode, hook, indices, entries=None, cancel_event=None
             # (full URLs, ytsearch1:, scsearch:) passes through untouched.
             video_url = f"https://www.youtube.com/watch?v={video_url}"
 
-        result = download(
-            video_url, mode, hook, cancel_event,
-        )
+        result = download(video_url, mode, hook, cancel_event,)
+
+        if cancel_event and cancel_event.is_set():
+            return 1
+        _skip.clear()
+
+        if result == 2:
+            _note(hook, {
+                "status": "playlist_item_skipped",
+                "title": title,},
+                f"Skipped: {title}")
+            continue
 
         if result != 0:
             failures.append(title)
             _note(hook, {
                 "status": "playlist_item_failed",
-                "title": title,
-            }, f"Failed: {title}")
-
+                "title": title,},
+                f"Failed: {title}")
+            
     if failures:
         _note(hook, {"status": "playlist_done", "failed": len(failures)},
               f"\nDone with {len(failures)} failure(s).")
